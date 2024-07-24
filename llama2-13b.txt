@@ -1,0 +1,63 @@
+!pip3 install transformers>=4.32.0 optimum>=1.12.0
+!pip3 install auto-gptq --extra-index-url https://huggingface.github.io/autogptq-index/whl/cu118/  # Use cu117 if on CUDA 11.7
+!pip3 install chromadb langchain langchain_huggingface langchain_Core langchain_community
+
+from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
+from langchain_huggingface.llms import HuggingFacePipeline
+from langchain_core.prompts import PromptTemplate
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.chains.summarize import load_summarize_chain 
+
+model_name_or_path = "TheBloke/Llama-2-7B-chat-GPTQ"
+model = AutoModelForCausalLM.from_pretrained(model_name_or_path,device_map="auto",trust_remote_code=False,revision="main")
+
+tokenizer = AutoTokenizer.from_pretrained(model_name_or_path, use_fast=True)
+
+input_text = '''Bank Clerk: Good morning, welcome to the Grammar Bank. How can I help you?
+Customer: Good morning. I would like to open a bank account.
+Bank Clerk: Sure thing. What kind of account would you like to open? A savings account or a checking account?
+Customer: What's the difference?
+Bank Clerk: A checking account is designed to use for everyday transactions. Yet; the money in a savings account is meant to stay in the account and earn interest over time.
+Customer: I see, actually I want to apply for a credit card. That's why I need an account.
+Bank Clerk: Okay then, you probably want a checking account.
+Customer: Well, thank you. I'd like that.
+Bank Clerk: Sure, we will have you fill out an application form, please.
+Customer: No problem.
+Bank Clerk: How much of a credit limit were you looking for?
+Customer:I would like a $10,000 spending limit.
+Bank Clerk: Alright, we will see what we can do. We might be able to get you one of our gold cards with a $10,000 spending limit.
+Customer: Wonderful. Will I also collect points when I use the card?
+Bank Clerk: Sure, with our gold card you will get 10 reward points for every dollar spent.
+Customer: Perfect, I have filled out the form. Do you need anything else?
+Bank Clerk: You just need to deposit a minimum of $250 into your new checking account.
+Customer: Very well, here you are.
+Bank Clerk: Thank you, your account is set up now and your credit card will be mailed to your address within 5 to 10 business days.
+Customer: Thank you for your help, have a good day.
+Bank Clerk: Thank you, you too.'''
+
+template="""[INST] <<SYS>>
+You are a helpful, respectful and honest assistant. You need to summarize in 50 words<</SYS>>
+'{text}'[/INST]
+"""
+
+prompt = PromptTemplate.from_template(template)
+
+pipe = pipeline(
+    "summarization",
+    model=model,
+    tokenizer=tokenizer,
+    max_new_tokens=200,
+)
+hf = HuggingFacePipeline(pipeline = pipe)
+chain = prompt | hf
+text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=20)
+chunks = text_splitter.create_documents([input_text])
+print(f'length of chunks=== {len(chunks)}')
+
+summary_chain = load_summarize_chain (llm = hf, chain_type = 'refine', question_prompt=prompt,refine_prompt=prompt,verbose=True)
+summary = summary_chain.run(chunks)
+print(summary)
+summary_text=summary.rsplit('''[/INST]''',1)
+print('-----')
+print(summary_text[-1])
+

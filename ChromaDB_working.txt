@@ -1,0 +1,23 @@
+!pip install langchain langchain_community 
+!pip install sentence-transformers
+!pip install langchain_chroma
+
+from langchain_chroma import Chroma
+from langchain_community.embeddings.sentence_transformer import SentenceTransformerEmbeddings
+embedding_function = SentenceTransformerEmbeddings(model_name="all-MiniLM-L6-v2")
+
+text=" A checking account is designed to use for everyday transactions. Yet; the money in a savings account is meant to stay in the account and earn interest over time"
+text2="Credit card will be mailed after 2 days"
+db = Chroma.from_texts([text,text2], embedding_function)
+print(f"DB creation complete{db.get()}");
+# query it
+query = "When will the credit card mailed"
+#docs = db.similarity_search('')
+
+query = "What is checking account"
+#query = "When will the credit card mailed"
+
+docs = db.similarity_search(query,1)
+print(docs)
+
+
