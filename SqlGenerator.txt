@@ -1,0 +1,133 @@
+!pip3 install transformers==4.35.2
+#https://gist.github.com/cfahlgren1/7b17edbc82ac6e29d53481e52e7410e9
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+tokenizer = AutoTokenizer.from_pretrained("chatdb/natural-sql-7b")
+model = AutoModelForCausalLM.from_pretrained(
+    "chatdb/natural-sql-7b",
+    device_map="auto",
+    torch_dtype=torch.float16,
+)
+questions = [
+    "Which employee had the highest salary in the 'Marketing' department, and what is the total budget of that department?",
+    "Identify the customer who placed the highest number of orders last year, and list the names and prices of the products they ordered most frequently.",
+    "Find the supplier that provided the most products currently out of stock, and show the names of these out-of-stock products.",
+    "Determine the customer with the largest total order value last month, and list all the products and their quantities they ordered.",
+    "Who is the employee that handled the most orders last quarter, and what is the status of their most recent order?"
+]
+
+for question in questions:
+
+    prompt = """### Task
+    Generate a SQL query to answer the following question:
+    `{question}`
+
+    ### PostgreSQL Database Schema
+    This query will run on a database whose schema is represented in this string:
+
+    CREATE TABLE employees (
+        employeeid SERIAL PRIMARY KEY,
+        firstname VARCHAR(50),
+        lastname VARCHAR(50),
+        birthdate DATE,
+        email VARCHAR(100),
+        phone VARCHAR(20),
+        salary NUMERIC(10, 2),
+        hiredate TIMESTAMP,
+        departmentid INT,
+        address VARCHAR(200),
+        city VARCHAR(50),
+        state VARCHAR(50),
+        zipcode VARCHAR(10),
+        country VARCHAR(50),
+        isactive BOOLEAN
+    );
+
+CREATE TABLE departments (
+    departmentid SERIAL PRIMARY KEY,
+    departmentname VARCHAR(100),
+    managerid INT,
+    location VARCHAR(100),
+    phonenumber VARCHAR(20),
+    budget NUMERIC(10, 2),
+    startdate DATE,
+    enddate DATE,
+    description TEXT,
+    email VARCHAR(100),
+    website VARCHAR(100)
+);
+
+CREATE TABLE products (
+    productid SERIAL PRIMARY KEY,
+    productname VARCHAR(100),
+    supplierid INT,
+    categoryid INT,
+    quantityperunit VARCHAR(50),
+    unitprice NUMERIC(10, 2),
+    unitsinstock SMALLINT,
+    unitsonorder SMALLINT,
+    reorderlevel SMALLINT,
+    discontinued BOOLEAN,
+    registered TIMESTAMP,
+    description TEXT
+);
+
+CREATE TABLE orders (
+    orderid SERIAL PRIMARY KEY,
+    customerid INT,
+    employeeid INT,
+    orderdate TIMESTAMP,
+    requireddate TIMESTAMP,
+    shippeddate TIMESTAMP,
+    shipvia INT,
+    freight NUMERIC(10, 2),
+    shipname VARCHAR(100),
+    shipaddress VARCHAR(200),
+    shipcity VARCHAR(50),
+    shipregion VARCHAR(50),
+    shippostalcode VARCHAR(10),
+    shipcountry VARCHAR(50),
+    status VARCHAR(20)
+);
+
+CREATE TABLE customers (
+    customerid SERIAL PRIMARY KEY,
+    companyname VARCHAR(100),
+    contactname VARCHAR(100),
+    contacttitle VARCHAR(50),
+    address VARCHAR(200),
+    city VARCHAR(50),
+    region VARCHAR(50),
+    postalcode VARCHAR(10),
+    country VARCHAR(50),
+    phone VARCHAR(20),
+    fax VARCHAR(20),
+    email VARCHAR(100),
+    website VARCHAR(100),
+    preferredcontactmethod VARCHAR(50),
+    registrationdate DATE
+);
+
+    ### SQL
+    Given the database schema, here is the SQL query that answers `{question}`:
+    ```sql
+    """.format(question=question)
+    eos_token_id = tokenizer.eos_token_id
+
+    inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
+    generated_ids = model.generate(
+        **inputs,
+        num_return_sequences=1,
+        eos_token_id=eos_token_id,
+        pad_token_id=eos_token_id,
+        max_new_tokens=400,
+        do_sample=False,
+        num_beams=1,
+
+    )
+
+    outputs = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+
+    import sqlparse
+    print ("Question: " + question)
+    print ("SQL: " + sqlparse.format(outputs[0].split("```sql")[-1], reindent=True))
